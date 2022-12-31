@@ -1,0 +1,217 @@
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>ArcGIS API for JavaScript Tutorials: Display a map</title>
+
+    <style>
+        html,
+        body,
+        #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+    </style>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.19/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.19/"></script>
+
+    <script>
+        require([
+            "esri/config",
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/layers/FeatureLayer",
+            "esri/Graphic",
+            "esri/layers/GeoJSONLayer"], function (esriConfig, Map, MapView, FL, Graphic, GeoJSONLayer) {
+
+                esriConfig.apiKey = "AAPK56e3ac027f044c4089d8ceec232fc05dYaOuzVRzm8tMRqvzOvDvIEevbqJ85yppn9PacU6cy4duurJrVK9wo_8BcWO8i8bi";
+
+                const map = new Map({
+                    basemap: "osm-standard" // Basemap layer service
+                });
+
+				const layer_2022 = new FL({
+                    url: "https://sampleserver6.arcgisonline.com/arcgis/rest/services/Earthquakes_Since1970/FeatureServer/0",
+                    popupTemplate:{title:"{magnitude}"}
+                });
+                map.add(layer_2022);
+
+				const geojsonlayer = new GeoJSONLayer({
+                    url: "https://cxqttkl.github.io/web4gis15/China_No_Area.json",
+                    copyright: "USGS Earthquakes"
+                });
+				
+                geojsonlayer.outFields = ["*"];
+                map.add(geojsonlayer);
+
+                const view = new MapView({
+                    map: map,
+                    center: [-119, 35.027], // Longitude, latitude
+                    zoom: 3, // Zoom level
+                    container: "viewDiv" // Div element
+                });
+
+                view.on("click", function (evt) {
+                    view.graphics.removeAll();
+                    if (evt.button != 0) return;
+                    let query = geojsonlayer.createQuery();
+                    //query.geometry = view.extent; //view.toMap(evt);  // the point location of the pointer
+                    //query.distance = 200;
+                    //query.units = "miles";
+                    //query.spatialRelationship = "intersects";  // this is the default
+                    query.returnGeometry = true;
+                    query.outFields = ["*"];
+                    query.where = "mag > 3";
+
+                    geojsonlayer.queryFeatureCount(query).then(function (abc) { alert("Layer查询: "+abc) });
+                    geojsonlayer.queryFeatures(query).then(function (abc) {
+
+
+                        abc.features.forEach(function (item) {
+
+                            var g = new Graphic({
+                                geometry: item.geometry,
+                                attributes: item.attributes,
+                                symbol: {
+                                    type: "simple-marker",
+                                    color: [0, 100, 255],
+                                    size: 5,//item.attributes['magnitude'] * item.attributes['magnitude'],
+                                    style: "square"
+
+                                }
+                            });
+
+                            view.graphics.add(g);
+                        });
+
+                    });
+
+                });
+				
+				
+                view.whenLayerView(geojsonlayer).then(function (layerView) {
+
+                    view.on("click", function (evt) {
+                        view.graphics.removeAll();
+                        if (evt.button != 2) return;
+                        let query = layerView.createQuery();
+                        //query.geometry = view.extent; //view.toMap(evt);  // the point location of the pointer
+                        //query.distance = 200;
+                        //query.units = "miles";
+                        //query.spatialRelationship = "intersects";  // this is the default
+                        query.returnGeometry = true;
+                        query.outFields = ["*"];
+                        query.where = "mag >3";
+
+                        layerView.queryFeatureCount(query).then(function (abc) { alert("LayerView查询: "+ abc) });
+                        layerView.queryFeatures(query).then(function (abc) {
+
+
+                            abc.features.forEach(function (item) {
+
+                                var g = new Graphic({
+                                    geometry: item.geometry,
+                                    attributes: item.attributes,
+                                    symbol: {
+                                        type: "simple-marker",
+                                        color: [20, 250, 20],
+                                        size: 5,
+                                        style: "square",
+										outline:null
+                                    }
+                                });
+
+                                view.graphics.add(g);
+                            });
+
+                        });
+						
+                    });
+					view.on("pointer-move", eventHandler);
+					view.on("pointer-down", eventHandler);
+					
+					function eventHandler(event) {
+					  // only include graphics from hurricanesLayer in the hitTest
+					  const opts = {
+					    include: geojsonlayer
+					  }
+					  // the hitTest() checks to see if any graphics from the hurricanesLayer
+					  // intersect the x, y coordinates of the pointer
+					  view.hitTest(event, opts).then(getGraphics);
+					}
+					
+					let highlight, currentYear, currentName;
+					
+					function getGraphics(response) {
+					  // the topmost graphic from the hurricanesLayer
+					  // and display select attribute values from the
+					  // graphic to the user
+					  if (response.results.length) {
+					    const graphic = response.results[0].graphic;
+					
+					    const attributes = graphic.attributes;
+					    const YYYYMMDD = attributes.yyyymmdd;
+					    const lat = attributes.latitude;
+						const long = attributes.longitude;
+					    const Name = attributes.name;
+					    const Year_ = attributes.year_;
+					    const Objectid = attributes.objectid;
+					
+					    if (
+					      highlight &&
+					      (currentName !== name || currentYear !== year)
+					    ) {
+					      highlight.remove();
+					      highlight = null;
+					      return;
+					    }
+					
+					    if (highlight) {
+					      return;
+					    }
+					
+					    document.getElementById("info").style.visibility = "visible";
+					    document.getElementById("Name").innerHTML = Name;
+					    document.getElementById("Objectid").innerHTML =
+					      "Objectid " + Objectid;
+					    document.getElementById("YYYYMMDD").innerHTML = YYYYMMDD ;
+					
+					    // highlight all features belonging to the same hurricane as the feature
+					    // returned from the hitTest
+					    const query = layerView.createQuery();
+					    query.where = "YEAR = " + Year_ + " AND NAME = '" + Name + "'";
+					    layerView.queryObjectIds(query).then((ids) => {
+					      if (highlight) {
+					        highlight.remove()
+					      }
+					      highlight = layerView.highlight(ids);
+					      currentYear = Year_;
+					      currentName = Name;
+					    });
+					  } else {
+					    // remove the highlight if no features are
+					    // returned from the hitTest
+					    if (highlight){
+					      highlight.remove();
+					      highlight = null;
+					    }
+					    document.getElementById("info").style.visibility = "hidden";
+					  }
+					}					
+
+                });
+
+            });
+    </script>
+
+</head>
+
+<body>
+    <div id="viewDiv"></div>
+</body>
+
+</html>
